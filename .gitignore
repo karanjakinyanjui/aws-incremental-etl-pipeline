@@ -10,4 +10,4 @@ cdk.out
 .env
 
 # Python cache
-python/
+**/python/
