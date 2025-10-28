@@ -1,0 +1,3 @@
+{
+  "python.analysis.extraPaths": ["./lambda/layers/alpha_phantage_layer/python"]
+}
