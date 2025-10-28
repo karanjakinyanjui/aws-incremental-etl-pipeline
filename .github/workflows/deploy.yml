@@ -1,0 +1,68 @@
+name: Build Layers and Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install Python dependencies for layers
+        run: python build_layers.py
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          # Alternative: Use access keys (less secure)
+          # aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: CDK Bootstrap (if needed)
+        run: npx cdk bootstrap
+        continue-on-error: true
+
+      - name: CDK Synth
+        run: npx cdk synth
+
+      - name: Upload Glue Script to S3
+        run: |
+          S3_BUCKET_NAME="${S3_BUCKET_NAME:-crypto-etl-data-bucket}"
+          aws s3 cp scripts/CryptoHourlyETLJob.py s3://${S3_BUCKET_NAME}/scripts/CryptoHourlyETLJob.py
+        env:
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+
+      - name: CDK Deploy
+        run: npx cdk deploy --all --require-approval never
